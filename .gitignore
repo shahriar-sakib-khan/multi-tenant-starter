@@ -1,0 +1,52 @@
+# ------------------------
+# Node / Express (Backend)
+# ------------------------
+node_modules/
+.env
+.env.*      # For .env.development, .env.production, etc.
+dist/
+build/
+coverage/
+logs/
+*.log
+
+node_modules
+
+# Optional: DB backups or local files
+dump/
+*.local
+
+# ------------------------
+# React / Vite (Frontend)
+# ------------------------
+client/node_modules/
+client/.env
+client/.env.*
+client/dist/
+client/build/
+client/coverage/
+
+# ------------------------
+# OS & IDE Junk
+# ------------------------
+.DS_Store
+Thumbs.db
+
+# VS Code settings
+.vscode/
+
+# JetBrains (WebStorm, IntelliJ, etc.)
+.idea/
+
+# ------------------------
+# Misc
+# ------------------------
+*.swp
+*.swo
+*.bak
+*.tmp
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+client/starter.txt

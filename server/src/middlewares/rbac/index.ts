@@ -1,0 +1,1 @@
+export {default as requireRole} from './roleAuthorization';
