@@ -1,34 +1,47 @@
 import { User } from '@/models';
 import { Errors } from '@/error';
-import { auth } from '@/middlewares/validators/validations';
 import { JWTs, Passwords } from '@/utils';
 import { userSanitizers } from '@/sanitizers';
+import { authValidator } from '@/middlewares';
 
 /**
- * Register a new user.
- * Sanitizes input, hashes password, and creates the user record.
+ * @module auth.service
  *
- * @param {RegisterInput} userData - Incoming user data from request body.
- * @returns {Promise<SanitizedUser>} - Sanitized user object without sensitive fields.
- * @throws {Errors.BadRequestError} - If email or username already exists.
+ * @description Centralized authentication service.
+ * Handles user registration, login, token refresh, and token verification.
+ */
+
+/**
+ * @function registerUser
+ * @description Registers a new user in the system.
+ *
+ * - Validates uniqueness of email and username
+ * - Hashes password before persisting
+ * - Returns sanitized user (no password, no internals)
+ *
+ * @param {authValidator.RegisterInput} userData - Registration payload.
+ * @returns {Promise<userSanitizers.SanitizedUser>} Newly created sanitized user.
+ * @throws {Errors.BadRequestError} If email or username already exists.
  */
 export const registerUser = async (
-  userData: auth.RegisterInput
+  userData: authValidator.RegisterInput
 ): Promise<userSanitizers.SanitizedUser> => {
   const { firstName, lastName, username, email, password, address } = userData;
 
-  const existingUsers = await User.find({
+  const existingUser = await User.findOne({
     $or: [{ email }, { username }],
-  }).select('email username');
+  })
+    .select('email username')
+    .lean();
 
-  if (existingUsers.length) {
-    if (existingUsers.some(u => u.email === email))
-      throw new Errors.BadRequestError('Email already exists');
-    if (existingUsers.some(u => u.username === username))
+  if (existingUser) {
+    if (existingUser.email === email) throw new Errors.BadRequestError('Email already exists');
+    if (existingUser.username === username)
       throw new Errors.BadRequestError('Username already exists');
   }
 
   const hashedPassword = await Passwords.hashPassword(password);
+
   const user = await User.create({
     firstName,
     lastName,
@@ -42,23 +55,28 @@ export const registerUser = async (
 };
 
 /**
- * Authenticate user by email or username and password.
+ * @function loginUser
+ * @description Authenticates a user via email or username with password.
  *
- * @param {Object} credentials - Object with loginIdentifier and password.
- * @param {string} credentials.loginIdentifier - Username or email.
- * @param {string} credentials.password - Plain text password to verify.
- * @returns {Promise<SanitizedUser>} - Authenticated user document.
- * @throws {Errors.UnauthenticatedError} - If user not found or password invalid.
+ * - Looks up user by email or username
+ * - Validates provided password against hash
+ * - Returns sanitized user
+ *
+ * @param {authValidator.LoginInput} credentials - Login identifier + password.
+ * @returns {Promise<userSanitizers.SanitizedUser>} Authenticated sanitized user.
+ * @throws {Errors.UnauthenticatedError} If user not found or password mismatch.
  */
 export const loginUser = async ({
   loginIdentifier,
   password,
-}: auth.LoginInput): Promise<userSanitizers.SanitizedUser> => {
+}: authValidator.LoginInput): Promise<userSanitizers.SanitizedUser> => {
   const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginIdentifier);
 
   const user = await User.findOne(
     isEmail ? { email: loginIdentifier } : { username: loginIdentifier }
-  ).select('+password');
+  )
+    .select('+password')
+    .lean();
 
   if (!user) throw new Errors.UnauthenticatedError('Invalid credentials');
 
@@ -69,30 +87,50 @@ export const loginUser = async ({
 };
 
 /**
- * Generates a new access token using a valid refresh token.
+ * @function refreshAccessToken
+ * @description Issues a new access token from a valid refresh token.
  *
- * @param {string} refreshToken - Incoming user data from req.user.
- * @returns {string} - Generated access token.
- * @throws {Errors.UnauthenticatedError} - If user object is not found on request.
+ * - Verifies refresh token
+ * - Ensures user still exists
+ * - Generates short-lived access token
+ *
+ * @param {string} refreshToken - Refresh token string.
+ * @returns {Promise<string>} New access token.
+ * @throws {Errors.UnauthenticatedError} If refresh token is missing or invalid.
+ * @throws {Errors.NotFoundError} If user not found.
  */
 export const refreshAccessToken = async (refreshToken: string): Promise<string> => {
   if (!refreshToken) throw new Errors.UnauthenticatedError('Refresh token missing');
 
   const { userId } = JWTs.verifyRefreshToken(refreshToken);
 
-  const user = await User.findById(userId);
+  const user = await User.findById(userId).lean();
   if (!user) throw new Errors.NotFoundError('User not found');
 
-  const accessToken = JWTs.createAccessToken({
-    userId,
-    role: user.role,
-  });
+  const accessToken = JWTs.createAccessToken({ userId, role: user.role });
 
   return accessToken;
 };
 
+/**
+ * @function verifyAccessToken
+ * @description Verifies an access token and returns decoded payload.
+ *
+ * @param {string} accessToken - Access token string.
+ * @returns {{ userId: string; role: string }} Decoded token payload.
+ * @throws {Errors.UnauthenticatedError} If token invalid or expired.
+ */
+export const verifyAccessToken = (accessToken: string): { userId: string; role: string } => {
+  try {
+    return JWTs.verifyAccessToken(accessToken);
+  } catch {
+    throw new Errors.UnauthenticatedError('Invalid or expired authentication token');
+  }
+};
+
 export default {
-  registerUser, // Registers a new user, hashes password, validates email/username uniqueness, returns sanitized user
-  loginUser, // Authenticates user via email or username, validates password, returns sanitized user
-  refreshAccessToken, // Verifies refresh token, generates new access token, validates user existence
+  registerUser, // Creates user in DB, ensures unique email/username, hashes password, returns sanitized user
+  loginUser, // Finds user by email/username, validates password, returns sanitized user
+  refreshAccessToken, // Validates refresh token, ensures user exists, issues new access token
+  verifyAccessToken, // Verifies access token and returns decoded payload
 };

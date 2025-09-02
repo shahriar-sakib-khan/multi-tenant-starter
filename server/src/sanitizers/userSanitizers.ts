@@ -15,8 +15,23 @@ export const userSanitizer = (user: IUser | HydratedDocument<IUser>) => ({
   address: user.address ?? null,
   role: user.role,
 });
-
 export type SanitizedUser = ReturnType<typeof userSanitizer>;
+
+export const adminUserSanitizer = (user: IUser | HydratedDocument<IUser>) => ({
+  id: String(user._id),
+  firstName: user.firstName,
+  lastName: user.lastName,
+  email: user.email,
+  username: user.username,
+  address: user.address ?? null,
+  role: user.role,
+  createdAt: user.createdAt,
+  updatedAt: user.updatedAt,
+  //  Other admin-only fields like
+  // isActive: user.isActive ?? true,
+  // lastLogin: user.lastLogin ?? null,
+});
+export type AdminSanitizedUser = ReturnType<typeof adminUserSanitizer>;
 
 /**
  * ----------------- User List Sanitizer -----------------
@@ -28,5 +43,4 @@ export const allUserSanitizer = (
 ) => ({
   users: listSanitizer(users, userSanitizer, fields),
 });
-
 export type SanitizedUsers = ReturnType<typeof allUserSanitizer>;

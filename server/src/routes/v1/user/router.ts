@@ -1,6 +1,6 @@
 import { Router } from 'express';
 
-import { validateRequest, requireAuth, userValidator } from '@/middlewares';
+import { validateRequest, userValidator } from '@/middlewares';
 import { userController } from '@/controllers/v1';
 
 /**
@@ -20,16 +20,15 @@ const router = Router();
  * @desc    Get the currently authenticated user's profile
  * @access  Private
  */
-router.get('/me', requireAuth, userController.getCurrentUser);
+router.get('/me', userController.getCurrentUser);
 
 /**
  * @route   PUT /user/me
  * @desc    Update the currently authenticated user's profile
  * @access  Private
  */
-router.put(
+router.patch(
   '/me',
-  requireAuth,
   validateRequest(userValidator.updateUserSchema),
   userController.updateUser
 );

@@ -58,12 +58,12 @@ export const login = async (req: Request, res: Response) => {
 
 /**
  * @function logout
- * @desc Logs out user by clearing the refresh token cookie.
+ * @desc Logs out user by clearing access and refresh token cookies.
  * @route POST /api/v1/auth/logout
  * @access Private
  */
 export const logout = (req: Request, res: Response) => {
-  res.cookie('refreshToken', '', {
+  res.cookie('accessToken', '', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     expires: new Date(0), // Unix epoch
@@ -71,7 +71,17 @@ export const logout = (req: Request, res: Response) => {
     path: '/',
   });
 
-  res.status(StatusCodes.OK).json({ message: 'User logged out successfully' });
+  res.cookie('refreshToken', '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    expires: new Date(0),
+    sameSite: 'strict',
+    path: '/',
+  });
+
+  res.status(StatusCodes.OK).json({
+    message: 'User logged out successfully',
+  });
 };
 
 /**

@@ -4,9 +4,10 @@
  * @description Services for user related operations:
  */
 
-import { IUser, User } from '@/models';
+import { User } from '@/models';
 import { Errors } from '@/error';
 import { userSanitizers } from '@/sanitizers';
+import { userValidator } from '@/middlewares';
 
 /**
  * @function getCurrentUser
@@ -29,36 +30,34 @@ export const getCurrentUser = async (userId: string): Promise<userSanitizers.San
  * Updates the current user's profile with allowed fields.
  *
  * @param {string} userId - User's ID.
- * @param {Partial<IUser>} userData - User update data.
+ * @param {UpdateUserInput} userData - User update data.
  * @returns {Promise<SanitizedUser>} The updated sanitized user.
  * @throws {Errors.BadRequestError} If no valid fields provided or email already exists.
  * @throws {Errors.NotFoundError} If user not found.
  */
 export const updateUser = async (
   userId: string,
-  userData: Partial<IUser>
+  userData: userValidator.UpdateUserInput
 ): Promise<userSanitizers.SanitizedUser> => {
-  const allowedFields = ['firstName', 'lastName', 'username', 'email', 'address'];
-  const updates: Partial<IUser> = {};
-
-  allowedFields.forEach(field => {
-    if (userData[field as keyof IUser] !== undefined) {
-      updates[field as keyof IUser] = userData[field as keyof IUser]!;
-    }
-  });
-
-  if (Object.keys(updates).length === 0) {
+  if (Object.keys(userData).length === 0) {
     throw new Errors.BadRequestError('No valid fields provided for update');
   }
 
-  if (updates.email) {
-    const existingUser = await User.findOne({ email: updates.email }).lean();
+  // Validate email and username uniqueness
+  if (userData.email) {
+    const existingUser = await User.findOne({ email: userData.email }).lean();
     if (existingUser && existingUser._id.toString() !== userId) {
       throw new Errors.BadRequestError('Email already exists');
     }
   }
+  if (userData.username) {
+    const existingUser = await User.findOne({ username: userData.username }).lean();
+    if (existingUser && existingUser._id.toString() !== userId) {
+      throw new Errors.BadRequestError('Username already exists');
+    }
+  }
 
-  const updatedUser = await User.findByIdAndUpdate(userId, updates, {
+  const updatedUser = await User.findByIdAndUpdate(userId, userData, {
     new: true,
     runValidators: true,
   }).lean();

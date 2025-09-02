@@ -4,9 +4,10 @@
  * @description Services for user-related operations (admin scope)
  */
 
-import { User, IUser } from '@/models';
+import { User } from '@/models';
 import { Errors } from '@/error';
 import { userSanitizers } from '@/sanitizers';
+import { userValidator } from '@/middlewares';
 
 /**
  * @function getAllUsers
@@ -16,7 +17,7 @@ import { userSanitizers } from '@/sanitizers';
  *
  * @param {number} page - Page number.
  * @param {number} limit - Number of users per page.
- * @returns {Promise<userSanitizers.SanitizedUsers & { totalUsers: number }>} Paginated sanitized users with total count.
+ * @returns {Promise<SanitizedUsers & { totalUsers: number }>} Paginated sanitized users with total count.
  */
 export const getAllUsers = async (
   page: number,
@@ -24,11 +25,11 @@ export const getAllUsers = async (
 ): Promise<userSanitizers.SanitizedUsers & { totalUsers: number }> => {
   const skip: number = (page - 1) * limit;
 
-  const usersDocs = await User.find().skip(skip).limit(limit).lean();
   const totalUsers: number = await User.countDocuments();
+  const usersDocs = await User.find().skip(skip).limit(limit).lean();
 
   return {
-    users: userSanitizers.allUserSanitizer(usersDocs, ['id', 'username', 'email']).users,
+    users: userSanitizers.allUserSanitizer(usersDocs, ['id', 'username', 'email', 'role']).users,
     totalUsers,
   };
 };
@@ -38,15 +39,15 @@ export const getAllUsers = async (
  * @description Retrieves a single user by ID with full sanitized fields.
  *
  * @param {string} userId - User ID.
- * @returns {Promise<userSanitizers.SanitizedUser>} Sanitized user object.
+ * @returns {Promise<AdminSanitizedUser>} Sanitized user object with full fields.
  * @throws {Errors.NotFoundError} If user not found.
  */
-export const getSingleUser = async (userId: string): Promise<userSanitizers.SanitizedUser> => {
+export const getSingleUser = async (userId: string): Promise<userSanitizers.AdminSanitizedUser> => {
   const user = await User.findById(userId).lean();
 
   if (!user) throw new Errors.NotFoundError('User not found');
 
-  return userSanitizers.userSanitizer(user);
+  return userSanitizers.adminUserSanitizer(user);
 };
 
 /**
@@ -54,43 +55,37 @@ export const getSingleUser = async (userId: string): Promise<userSanitizers.Sani
  * @description Admin updates any user's allowed fields.
  *
  * @param {string} userId - Target user ID.
- * @param {Partial<IUser>} userData - Fields to update.
- * @returns {Promise<userSanitizers.SanitizedUser>} Updated sanitized user.
+ * @param {UpdateUserInput} userData - Fields to update.
+ * @returns {Promise<AdminSanitizedUser>} Updated sanitized user.
  * @throws {Errors.BadRequestError} If no valid fields or email already exists.
  * @throws {Errors.NotFoundError} If user not found.
  */
 export const adminUpdateUser = async (
   userId: string,
-  userData: Partial<IUser>
-): Promise<userSanitizers.SanitizedUser> => {
-  const allowedFields = ['firstName', 'lastName', 'username', 'email', 'address', 'roles'];
-  const updates: Partial<IUser> = {};
-
-  allowedFields.forEach(field => {
-    if (userData[field as keyof IUser] !== undefined) {
-      updates[field as keyof IUser] = userData[field as keyof IUser]!;
-    }
-  });
-
-  if (Object.keys(updates).length === 0) {
-    throw new Errors.BadRequestError('No valid fields provided for update');
-  }
-
-  if (updates.email) {
-    const existingUser = await User.findOne({ email: updates.email }).lean();
+  userData: userValidator.UpdateUserAdminInput
+): Promise<userSanitizers.AdminSanitizedUser> => {
+  // Validate email and username uniqueness
+  if (userData.email) {
+    const existingUser = await User.findOne({ email: userData.email }).lean();
     if (existingUser && existingUser._id.toString() !== userId) {
       throw new Errors.BadRequestError('Email already exists');
     }
   }
+  if (userData.username) {
+    const existingUser = await User.findOne({ username: userData.username }).lean();
+    if (existingUser && existingUser._id.toString() !== userId) {
+      throw new Errors.BadRequestError('Username already exists');
+    }
+  }
 
-  const updatedUser = await User.findByIdAndUpdate(userId, updates, {
+  const updatedUser = await User.findByIdAndUpdate(userId, userData, {
     new: true,
     runValidators: true,
   }).lean();
 
   if (!updatedUser) throw new Errors.NotFoundError('User not found');
 
-  return userSanitizers.userSanitizer(updatedUser);
+  return userSanitizers.adminUserSanitizer(updatedUser);
 };
 
 /**
@@ -99,7 +94,7 @@ export const adminUpdateUser = async (
  *
  * @param {string} adminId - Admin's own user ID.
  * @param {string} targetUserId - Target user ID.
- * @returns {Promise<userSanitizers.SanitizedUser>} Deleted sanitized user.
+ * @returns {Promise<SanitizedUser>} Deleted sanitized user.
  * @throws {Errors.BadRequestError} If admin attempts to delete themselves.
  * @throws {Errors.NotFoundError} If user not found.
  */

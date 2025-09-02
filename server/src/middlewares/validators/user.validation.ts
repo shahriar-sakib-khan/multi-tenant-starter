@@ -6,6 +6,8 @@
  */
 import { z } from 'zod';
 
+import { roleConstants } from '@/common';
+
 /**
  * UpdateUserInputSchema
  * @property {string} [firstName] - Optional. Only letters and spaces allowed.
@@ -52,9 +54,16 @@ export const updateUserSchema = z
       .optional(),
 
     address: z.string().optional(),
-
-    role: z.enum(['user', 'admin', 'moderator', 'manager'] as const).optional(), // replace values with your roleConstants.SuperRoles
   })
   .strict();
-
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+
+export const updateUserAdminSchema = updateUserSchema
+  .extend({
+    role: z.enum(roleConstants.SuperRoles).optional(),
+    // add any other admin-only fields here like
+    // isActive: z.boolean().optional(),
+    // lastLogin: z.date().optional(),
+  })
+  .strict();
+export type UpdateUserAdminInput = z.infer<typeof updateUserAdminSchema>;
